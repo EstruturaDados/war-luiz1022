@@ -1,0 +1,210 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+#include <stdbool.h>
+#define MAX_TERRITORIOS 5
+#define MAX_NOME 50
+#define MAX_COR 20
+#define NUM_MISSOES 2
+
+typedef struct {
+    char nome[MAX_NOME];
+    char cor_exercito[MAX_COR];
+    int tropas;
+    int id; 
+} Territorio;
+
+void inicializar_territorios(Territorio **mapa);
+void exibir_mapa(const Territorio *mapa);
+void exibir_menu();
+void atacar(Territorio *mapa);
+int rolar_dado(const char *tipo);
+void verificar_missao(const Territorio *mapa, int missao_atual, bool *vitoria);
+bool checar_conquista(const Territorio *mapa, int id_defensor);
+bool checar_destruicao(const Territorio *mapa, const char *cor_alvo);
+
+int main() {
+    
+    srand(time(NULL));
+    Territorio *mapa = NULL;
+    inicializar_territorios(&mapa);
+
+    int escolha_menu;
+    bool vitoria = false;
+   
+    const int missao_atual = (rand() % NUM_MISSOES) + 1; // 1 ou 2
+    do {
+        exibir_mapa(mapa);
+        exibir_menu();
+        printf("Escolha uma opção: ");
+        if (scanf("%d", &escolha_menu) != 1) {
+            while (getchar() != '\n');
+            escolha_menu = -1; 
+        }
+        while (getchar() != '\n'); 
+
+        switch (escolha_menu) {
+            case 1:
+                atacar(mapa);
+                break;
+            case 2:
+                verificar_missao(mapa, missao_atual, &vitoria);
+                break;
+            case 0:
+                printf("\nSaindo do jogo. Até a próxima!\n");
+                break;
+            default:
+                printf("\nOpção inválida. Tente novamente.\n");
+                break;
+        }
+
+        if (vitoria) {
+            printf("\n\n🏆 **PARABÉNS! VOCÊ COMPLETOU SUA MISSÃO E VENCEU O JOGO!** 🏆\n\n");
+            escolha_menu = 0; // Sai do loop
+        }
+    } while (escolha_menu != 0);
+
+    free(mapa);
+    return 0;
+}
+
+void inicializar_territorios(Territorio **mapa) {
+    *mapa = (Territorio *)calloc(MAX_TERRITORIOS, sizeof(Territorio));
+    if (*mapa == NULL) {
+        perror("Erro ao alocar memória para o mapa");
+        exit(EXIT_FAILURE);
+    }
+    const char *nomes[] = {"Asia", "Europa", "Africa", "America", "Oceania"};
+    const char *cores[] = {"Azul", "Vermelho", "Verde", "Amarelo", "Preto"};
+
+    for (int i = 0; i < MAX_TERRITORIOS; i++) {
+        (*mapa)[i].id = i + 1;
+        strncpy((*mapa)[i].nome, nomes[i], MAX_NOME - 1);
+        strncpy((*mapa)[i].cor_exercito, cores[i], MAX_COR - 1);
+        (*mapa)[i].tropas = (rand() % 4) + 2;
+    }
+    printf("\n🗺️ **Mapa Inicializado** com 5 Territórios.\n");
+}
+
+void exibir_mapa(const Territorio *mapa) {
+    printf("\n*** Estado Atual do Mapa ***\n");
+    for (int i = 0; i < MAX_TERRITORIOS; i++) {
+        printf("  **[%d]** %s | Exército: %s | Tropas: **%d**\n",
+               mapa[i].id, mapa[i].nome, mapa[i].cor_exercito, mapa[i].tropas);
+    }
+    printf("***************************\n");
+}
+
+void exibir_menu() {
+    printf("\n*** Menu Principal ***\n");
+    printf("1. Atacar\n");
+    printf("2. Verificar Missão\n");
+    printf("0. Sair\n");
+    printf("**********************\n");
+}
+
+void atacar(Territorio *mapa) {
+    int id_atacante, id_defensor;
+    printf("\n--- Fase de Ataque ---\n");
+    printf("ID do Território Atacante (1 a %d): ", MAX_TERRITORIOS);
+    scanf("%d", &id_atacante);
+    printf("ID do Território Defensor (1 a %d): ", MAX_TERRITORIOS);
+    scanf("%d", &id_defensor);
+    while (getchar() != '\n'); 
+
+    if (id_atacante < 1 || id_atacante > MAX_TERRITORIOS || id_defensor < 1 || id_defensor > MAX_TERRITORIOS || id_atacante == id_defensor) {
+        printf("⚠️ IDs inválidos ou iguais. O ataque não ocorreu.\n");
+        return;
+    }
+
+    Territorio *atacante = &mapa[id_atacante - 1];
+    Territorio *defensor = &mapa[id_defensor - 1];
+
+    if (atacante->tropas <= 1) {
+        printf("⚠️ Território atacante (%s) precisa de mais de 1 tropa para atacar!\n", atacante->nome);
+        return;
+    }
+    if (strcmp(atacante->cor_exercito, defensor->cor_exercito) == 0) {
+         printf("⚠️ Você já domina este território (%s).\n", defensor->nome);
+         return;
+    }
+
+    printf("\n⚔️ **%s** (Tropas: %d) ataca **%s** (Tropas: %d)\n", atacante->nome, atacante->tropas, defensor->nome, defensor->tropas);
+
+    const int dado_ataque = rolar_dado("Ataque");
+    const int dado_defesa = rolar_dado("Defesa");
+
+    printf("🎲 Resultados dos Dados: Ataque: **%d** | Defesa: **%d**\n", dado_ataque, dado_defesa);
+
+    if (dado_ataque >= dado_defesa) {
+        printf("🎉 Ataque VITORIOSO! Defensor perde 1 tropa.\n");
+        defensor->tropas -= 1;
+
+        if (defensor->tropas == 0) {
+            printf("🔥 Território **%s** foi CONQUISTADO!\n", defensor->nome);
+            strncpy(defensor->cor_exercito, atacante->cor_exercito, MAX_COR - 1);
+            defensor->tropas = 1;
+            atacante->tropas -= 1;
+
+            if (atacante->tropas < 1) { 
+                atacante->tropas = 1;
+            }
+        }
+    } else {
+        printf("🛡️ Defesa BEM-SUCEDIDA! Atacante perde 1 tropa.\n");
+        atacante->tropas -= 1;
+    }
+}
+
+int rolar_dado(const char *tipo) {
+    return (rand() % 6) + 1;
+}
+
+void verificar_missao(const Territorio *mapa, int missao_atual, bool *vitoria) {
+    printf("\n--- Verificação da Missão ---\n");
+
+    if (missao_atual == 1) {
+        const char *cor_alvo = "Verde";
+        printf("🎯 Missão: Destruir totalmente o exército **%s**.\n", cor_alvo);
+        *vitoria = checar_destruicao(mapa, cor_alvo);
+    } else if (missao_atual == 2) {
+        const int alvos_conquistar = 3;
+        printf("🎯 Missão: Conquistar **%d** territórios (Ter 3 ou mais de seu exército).\n", alvos_conquistar);
+        
+        const char *minha_cor = "Azul";
+        int contagem = 0;
+        for (int i = 0; i < MAX_TERRITORIOS; i++) {
+            if (strcmp(mapa[i].cor_exercito, minha_cor) == 0) {
+                contagem++;
+            }
+        }
+        printf("➡️ Você controla %d territórios da cor %s.\n", contagem, minha_cor);
+        *vitoria = (contagem >= alvos_conquistar);
+    }
+
+    if (*vitoria) {
+        printf("✅ **MISSÃO CUMPRIDA!** Prepare-se para a vitória!\n");
+    } else {
+        printf("❌ Missão ainda **NÃO** cumprida. Continue atacando!\n");
+    }
+}
+
+bool checar_destruicao(const Territorio *mapa, const char *cor_alvo) {
+    for (int i = 0; i < MAX_TERRITORIOS; i++) {
+        if (strcmp(mapa[i].cor_exercito, cor_alvo) == 0) {
+            
+            return false;
+        }
+    }
+    
+    return true;
+}
+
+bool checar_conquista(const Territorio *mapa, int id_defensor) {
+    if (id_defensor >= 1 && id_defensor <= MAX_TERRITORIOS) {
+        return mapa[id_defensor - 1].tropas <= 0;
+    }
+    return false;
+}
+
